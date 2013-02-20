@@ -1,0 +1,150 @@
+<html>
+	<style type="text/css">
+	.button {
+	  border-radius: 3px;
+	  -moz-border-radius: 3px;
+	  background: -webkit-gradient(linear, left top, left bottom, from(#fff), to(#ddd));
+	  background: -moz-linear-gradient(top, #fff, #ddd);  
+	  border: 1px solid #bbb;
+	}
+
+	.button:active {
+		background: -webkit-gradient(linear, left top, left bottom, from(#aaa), to(#333)); 
+		background: -moz-linear-gradient(bottom, #ddd, #aaa);
+	}
+	</style>
+	<body>
+		<h1>Perudo app</h1>
+		<div id="state"></div>
+		<!--<script src="//talkgadget.google.com/hangouts/_/api/hangout.js?v=1.3"></script>-->
+		<script src="//hangoutsapi.talkgadget.google.com/hangouts/_/api/hangout.js?v=1.3"></script>
+		<script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+		<script src="//nelson.fedr.co/~mcfedr/perudo/hogan.js"></script>
+		<script>
+		var $state;
+		function showState() {
+			var game = getGame();
+			if(!game) {
+				$state.html(getTemplate('start').render());
+				$state.find('button').on('click', function() {
+					createGame();
+				});
+				return;
+			}
+			var round = game.rounds[game.rounds.length - 1];
+			if(round.players[round.player] == gapi.hangout.getLocalParticipantId()) {
+				$state.html(getTemplate('moving').render({
+					calls: round.calls
+				}));
+				$state.find('button').on('click', function() {
+					var call = {
+						dice: $state.find('[name=dice]').val(),
+						amount: $state.find('[name=amount]').val()
+					};
+					round.calls.push(call);
+					round.player = (round.player + 1) % round.players.length;
+					setGame(game);
+				});
+			}
+			else {
+				$state.html(getTemplate('waiting').render({
+					nextPlayer: gapi.hangout.getParticipantById(round.player).person.displayName,
+					calls: round.calls
+				}));
+			}
+		}
+		
+		function getGame() {
+			var gameStr = gapi.hangout.data.getValue('game');
+			return gameStr && JSON.parse(gameStr);
+		}
+		
+		function setGame(game) {
+			gapi.hangout.data.setValue('game', JSON.stringify(game));
+		}
+		
+		function createGame() {
+			var game = {
+				rounds: [],
+				dice: []
+			};
+			createRound(game);	
+		}
+		
+		function createRound(game) {
+			var round = {
+				calls: [],
+				players: []
+			};
+			gapi.hangout.getEnabledParticipants().forEach(function(participant) {
+				if(!game.dice[participant.id]) {
+					//All new players have 5 dice
+					game.dice[participant.id] = 5;
+				}
+				round.players.push(participant.id);
+			});
+			round.player = 0;
+			game.rounds.push(round);
+			gapi.hangout.data.setValue('game', JSON.stringify(game));
+		}
+		
+		var ts = {};
+		var getTemplate = function(name) {
+			return ts[name];
+		}
+		
+		function loadTemplates() {
+			$('.template').each(function() {
+				$tmpl = $(this);
+				ts[$tmpl.attr('id')] = Hogan.compile($tmpl.html());
+			});
+		}
+		
+		gadgets.util.registerOnLoadHandler(function(){
+			// When API is ready...
+			gapi.hangout.onApiReady.add(function(eventObj) {
+				if (eventObj.isApiReady) {
+					$state = $('#state');
+					loadTemplates();
+					gapi.hangout.data.onStateChanged.add(showState);
+					showState();
+				}
+			});
+		});
+		</script>
+		<script type="text/mustache" id="start" class="template">
+			<h2>Waiting for the game to start</h2>
+			<p><button>Start the game</button></p>
+		</script>
+		<script type="text/mustache" id="moving" class="template">
+			<h2>Moving</h2>
+			<p>Its your turn</p>
+			<select name="dice">
+				<option value="1">1</option>
+				<option value="2">2</option>
+				<option value="3">3</option>
+				<option value="4">4</option>
+				<option value="5">5</option>
+				<option value="6">6</option>
+			</select>
+			<input type="number" name="amount" />
+			<button>Go</button>
+			<h3>Calls so far</h3>
+			<ul>
+				{{#calls}}
+					<li>{{amount}} {{dice}}'s</li>
+				{{/calls}}
+			</ul>
+		</script>
+		<script type="text/mustache" id="waiting" class="template">
+			<h2>Waiting for {{nextPlayer}}</h2>
+			<p>Waiting for {{nextPlayer}} to take their turn.</p>
+			<h3>Calls so far</h3>
+			<ul>
+				{{#calls}}
+					<li>{{amount}} {{dice}}'s'</li>
+				{{/calls}}
+			</ul>
+		</script>
+	</body>
+</html>
